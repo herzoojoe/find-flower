@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>식물 인식기</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f7f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px;
+    }
+
+    h1 { font-size: 2rem; color: #2d6a4f; margin-bottom: 8px; }
+    .subtitle { color: #52796f; margin-bottom: 36px; font-size: 0.95rem; }
+
+    /* ── API 키 설정 배너 ── */
+    #key-banner {
+      width: 100%;
+      max-width: 480px;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+      color: #856404;
+    }
+    #key-banner button {
+      margin-left: auto;
+      padding: 5px 14px;
+      background: #ffc107;
+      border: none;
+      border-radius: 20px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* ── 키 입력 모달 ── */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #modal-overlay.open { display: flex; }
+
+    #modal {
+      background: white;
+      border-radius: 16px;
+      padding: 28px 28px 24px;
+      width: 90%;
+      max-width: 420px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    }
+    #modal h2 { font-size: 1.1rem; color: #2d6a4f; margin-bottom: 8px; }
+    #modal p  { font-size: 0.85rem; color: #666; margin-bottom: 16px; line-height: 1.5; }
+
+    #modal input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #b7e4c7;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      margin-bottom: 14px;
+      outline: none;
+      font-family: monospace;
+    }
+    #modal input:focus { border-color: #2d6a4f; }
+
+    #modal-save {
+      width: 100%;
+      padding: 11px;
+      background: #2d6a4f;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #modal-save:hover { background: #1b4332; }
+
+    /* ── 업로드 영역 ── */
+    .upload-area {
+      width: 100%;
+      max-width: 480px;
+      background: white;
+      border: 2px dashed #95d5b2;
+      border-radius: 16px;
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-area.drag-over { border-color: #2d6a4f; background: #d8f3dc; }
+    .upload-icon { font-size: 3rem; margin-bottom: 12px; }
+    .upload-text { color: #52796f; font-size: 0.95rem; line-height: 1.6; }
+    #file-input { display: none; }
+
+    #preview-wrap { margin-top: 16px; display: none; }
+    #preview {
+      width: 100%;
+      max-width: 480px;
+      max-height: 320px;
+      object-fit: contain;
+      border-radius: 12px;
+      border: 1px solid #b7e4c7;
+    }
+
+    #analyze-btn {
+      margin-top: 20px;
+      padding: 14px 48px;
+      background: #2d6a4f;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      display: none;
+    }
+    #analyze-btn:hover { background: #1b4332; }
+    #analyze-btn:active { transform: scale(0.97); }
+    #analyze-btn:disabled { background: #95d5b2; cursor: not-allowed; }
+
+    /* ── 로딩 ── */
+    #loading {
+      display: none;
+      margin-top: 24px;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: #52796f;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 4px solid #d8f3dc;
+      border-top-color: #2d6a4f;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── 결과 카드 ── */
+    #result-card {
+      display: none;
+      margin-top: 32px;
+      width: 100%;
+      max-width: 480px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(45,106,79,0.12);
+      overflow: hidden;
+    }
+    .card-header { background: #2d6a4f; color: white; padding: 20px 24px; }
+    .plant-name-ko  { font-size: 1.5rem; font-weight: 700; }
+    .plant-name-sci { font-size: 0.85rem; opacity: 0.8; font-style: italic; margin-top: 4px; }
+    .card-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+    .info-row { display: flex; align-items: center; gap: 12px; }
+    .info-icon  { font-size: 1.3rem; width: 28px; text-align: center; }
+    .info-label {
+      font-size: 0.78rem; color: #95a5a6; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      width: 80px; flex-shrink: 0;
+    }
+    .info-value { color: #2c3e50; font-size: 0.95rem; }
+    .badge { padding: 3px 14px; border-radius: 50px; font-size: 0.85rem; font-weight: 700; }
+    .badge-easy   { background: #d8f3dc; color: #1b4332; }
+    .badge-medium { background: #fff3cd; color: #856404; }
+    .badge-hard   { background: #fde8e8; color: #9b2335; }
+    .divider { border: none; border-top: 1px solid #f0f0f0; }
+    .tips-section { padding: 0 24px 20px; }
+    .tips-label {
+      font-size: 0.78rem; color: #95a5a6; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .tips-text { color: #52796f; font-size: 0.9rem; line-height: 1.6; }
+
+    #error-msg {
+      display: none;
+      margin-top: 20px;
+      padding: 14px 20px;
+      background: #fde8e8;
+      border-radius: 10px;
+      color: #9b2335;
+      font-size: 0.9rem;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+
+    /* 키 변경 링크 */
+    .change-key {
+      margin-top: 12px;
+      font-size: 0.78rem;
+      color: #95d5b2;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- API 키 미설정 배너 -->
+  <div id="key-banner" style="display:none">
+    ⚠️ OpenRouter API 키가 필요합니다.
+    <button onclick="openModal()">키 입력하기</button>
+  </div>
+
+  <h1>🌿 식물 인식기</h1>
+  <p class="subtitle">식물 사진을 업로드하면 이름과 관리법을 알려드립니다.</p>
+
+  <!-- 업로드 영역 -->
+  <div class="upload-area" id="upload-area">
+    <div class="upload-icon">📷</div>
+    <p class="upload-text">
+      이미지를 여기에 드래그하거나<br>
+      <strong>클릭해서 파일을 선택</strong>하세요
+    </p>
+    <input type="file" id="file-input" accept="image/*">
+  </div>
+
+  <div id="preview-wrap">
+    <img id="preview" src="" alt="미리보기">
+  </div>
+
+  <button id="analyze-btn">식물 분석하기</button>
+  <span class="change-key" id="change-key-btn" style="display:none" onclick="openModal()">🔑 API 키 변경</span>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>식물을 분석하는 중...</span>
+  </div>
+
+  <div id="error-msg"></div>
+
+  <!-- 결과 카드 -->
+  <div id="result-card">
+    <div class="card-header">
+      <div class="plant-name-ko"  id="res-name-ko"></div>
+      <div class="plant-name-sci" id="res-name-sci"></div>
+    </div>
+    <div class="card-body">
+      <div class="info-row">
+        <span class="info-icon">💧</span>
+        <span class="info-label">물 주기</span>
+        <span class="info-value" id="res-watering"></span>
+      </div>
+      <div class="info-row">
+        <span class="info-icon">☀️</span>
+        <span class="info-label">햇빛</span>
+        <span class="info-value" id="res-sunlight"></span>
+      </div>
+      <div class="info-row">
+        <span class="info-icon">🌱</span>
+        <span class="info-label">난이도</span>
+        <span id="res-difficulty"></span>
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="tips-section">
+      <div class="tips-label">관리 팁</div>
+      <div class="tips-text" id="res-tips"></div>
+    </div>
+  </div>
+
+  <!-- API 키 입력 모달 -->
+  <div id="modal-overlay">
+    <div id="modal">
+      <h2>🔑 OpenRouter API 키 설정</h2>
+      <p>
+        <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>에서
+        발급한 API 키를 입력하세요.<br>
+        키는 이 브라우저에만 저장되며 외부로 전송되지 않습니다.
+      </p>
+      <input type="password" id="key-input" placeholder="sk-or-v1-..." autocomplete="off">
+      <button id="modal-save" onclick="saveKey()">저장하고 시작하기</button>
+    </div>
+  </div>
+
+  <script>
+    const MODEL  = 'google/gemma-4-31b-it:free';
+    const PROMPT = `당신은 식물 전문가입니다. 사진 속 식물을 분석하고 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요.
+
+{
+  "name_korean": "한국어 식물 이름",
+  "name_scientific": "학명",
+  "watering": "물 주기 빈도 (예: 주 1~2회)",
+  "sunlight": "필요 햇빛량 (예: 밝은 간접광)",
+  "difficulty": "쉬움",
+  "tips": "핵심 관리 팁을 1~2문장으로"
+}
+
+difficulty 값은 반드시 '쉬움', '보통', '어려움' 중 하나여야 합니다.
+사진에 식물이 없거나 인식 불가 시: {"error": "식물을 인식할 수 없습니다."}`;
+
+    const uploadArea  = document.getElementById('upload-area');
+    const fileInput   = document.getElementById('file-input');
+    const previewWrap = document.getElementById('preview-wrap');
+    const preview     = document.getElementById('preview');
+    const analyzeBtn  = document.getElementById('analyze-btn');
+    const loading     = document.getElementById('loading');
+    const errorMsg    = document.getElementById('error-msg');
+    const resultCard  = document.getElementById('result-card');
+
+    let selectedFile = null;
+
+    // ── API 키 관리 ───────────────────────────────────────────
+    function getKey()  { return localStorage.getItem('or_api_key') || ''; }
+    function openModal() {
+      document.getElementById('key-input').value = getKey();
+      document.getElementById('modal-overlay').classList.add('open');
+    }
+    function saveKey() {
+      const k = document.getElementById('key-input').value.trim();
+      if (!k) return alert('API 키를 입력해주세요.');
+      localStorage.setItem('or_api_key', k);
+      document.getElementById('modal-overlay').classList.remove('open');
+      document.getElementById('key-banner').style.display = 'none';
+      document.getElementById('change-key-btn').style.display = 'inline';
+    }
+
+    // 모달 바깥 클릭 시 닫기
+    document.getElementById('modal-overlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('modal-overlay') && getKey())
+        document.getElementById('modal-overlay').classList.remove('open');
+    });
+
+    // 엔터로 저장
+    document.getElementById('key-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') saveKey();
+    });
+
+    // 페이지 로드 시 키 확인
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!getKey()) {
+        document.getElementById('key-banner').style.display = 'flex';
+        openModal();
+      } else {
+        document.getElementById('change-key-btn').style.display = 'inline';
+      }
+    });
+
+    // ── 이미지 업로드 ─────────────────────────────────────────
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', e => {
+      e.preventDefault();
+      uploadArea.classList.add('drag-over');
+    });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+    uploadArea.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadArea.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) handleFile(file);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        preview.src = e.target.result;
+        previewWrap.style.display = 'block';
+        analyzeBtn.style.display = 'inline-block';
+        resultCard.style.display = 'none';
+        errorMsg.style.display   = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ── 분석 요청 ─────────────────────────────────────────────
+    analyzeBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      const apiKey = getKey();
+      if (!apiKey) { openModal(); return; }
+
+      analyzeBtn.disabled = true;
+      loading.style.display = 'flex';
+      resultCard.style.display = 'none';
+      errorMsg.style.display   = 'none';
+
+      try {
+        // 이미지를 base64 data URL로 변환
+        const dataUrl = await toDataUrl(selectedFile);
+
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            max_tokens: 600,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: dataUrl } },
+                { type: 'text',      text: PROMPT },
+              ],
+            }],
+          }),
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+          const code = json?.error?.metadata?.raw || json?.error?.message || res.status;
+          if (res.status === 401) throw new Error('API 키가 올바르지 않습니다.');
+          if (res.status === 429) throw new Error('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
+          throw new Error(`오류: ${code}`);
+        }
+
+        let raw = json.choices[0].message.content.trim();
+        if (raw.includes('```')) {
+          raw = raw.split('```')[1];
+          if (raw.startsWith('json')) raw = raw.slice(4);
+        }
+
+        const data = JSON.parse(raw.trim());
+        if (data.error) throw new Error(data.error);
+        showResult(data);
+
+      } catch (e) {
+        showError(e.message);
+      } finally {
+        loading.style.display   = 'none';
+        analyzeBtn.disabled = false;
+      }
+    });
+
+    function toDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function showResult(data) {
+      document.getElementById('res-name-ko').textContent  = data.name_korean    || '-';
+      document.getElementById('res-name-sci').textContent = data.name_scientific || '';
+      document.getElementById('res-watering').textContent = data.watering        || '-';
+      document.getElementById('res-sunlight').textContent = data.sunlight        || '-';
+      document.getElementById('res-tips').textContent     = data.tips            || '-';
+
+      const diff = data.difficulty || '';
+      const cls  = diff === '쉬움' ? 'badge-easy' : diff === '어려움' ? 'badge-hard' : 'badge-medium';
+      document.getElementById('res-difficulty').innerHTML =
+        `<span class="badge ${cls}">${diff}</span>`;
+
+      resultCard.style.display = 'block';
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = '⚠️ ' + msg;
+      errorMsg.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
